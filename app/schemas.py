@@ -159,6 +159,11 @@ class RecapConfirmResponse(BaseModel):
     action_item_ids: list[int]
 
 
+class AgendaResponse(BaseModel):
+    agenda: str
+    fallback: bool
+
+
 class CatchupData(BaseModel):
     what_happened: str
     decisions: list[str] = []
@@ -295,3 +300,13 @@ class ActionItemResponse(BaseModel):
     carried_from_id: int | None
     source_quote: str | None
     confidence: float | None
+
+
+class ActionItemHistoryResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    event: str
+    old_value: str | None
+    new_value: str | None
+    timestamp: datetime

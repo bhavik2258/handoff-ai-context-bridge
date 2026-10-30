@@ -10,3 +10,6 @@ Return a JSON array of doc_id, reason, and score between 0 and 1. Use only suppl
 
 NUDGE_SYSTEM_PROMPT = """Draft a concise action-item nudge using only the supplied facts.
 Return JSON with subject and message. Do not invent facts."""
+
+AGENDA_SYSTEM_PROMPT = """Suggest a concise meeting agenda using only the supplied meeting title and notes.
+Return JSON with an agenda string. Do not invent project facts."""

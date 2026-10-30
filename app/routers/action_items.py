@@ -24,6 +24,7 @@ from ..schemas import (
     ActionItemResponse,
     ActionItemStatusUpdate,
     ActionItemUpdate,
+    ActionItemHistoryResponse,
     KnowledgeLinkList,
     KnowledgeLinkResponse,
     KnowledgeLinkSuggestion,
@@ -183,6 +184,25 @@ def list_action_items(
     if meeting_id is not None:
         statement = statement.where(ActionItem.meeting_id == meeting_id)
     return list(db.scalars(statement).all())
+
+
+@router.get("/{item_id}", response_model=ActionItemResponse)
+def get_action_item(item_id: int, db: Session = Depends(get_db)) -> ActionItem:
+    return get_action_item_or_404(item_id, db)
+
+
+@router.get("/{item_id}/history", response_model=list[ActionItemHistoryResponse])
+def get_action_item_history(
+    item_id: int, db: Session = Depends(get_db)
+) -> list[ActionItemHistory]:
+    item = get_action_item_or_404(item_id, db)
+    return list(
+        db.scalars(
+            select(ActionItemHistory)
+            .where(ActionItemHistory.action_item_id == item.id)
+            .order_by(ActionItemHistory.timestamp.asc(), ActionItemHistory.id.asc())
+        ).all()
+    )
 
 
 @router.post("/{item_id}/ai/link", response_model=KnowledgeLinkList)

@@ -5,6 +5,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+from pydantic import BaseModel
 
 from ..database import get_db
 from ..models import (
@@ -17,9 +18,10 @@ from ..models import (
     Participant,
 )
 from ..services.ai_client import AIUnavailableError, call_ai_json
-from ..services.prompts import RECAP_SYSTEM_PROMPT
+from ..services.prompts import AGENDA_SYSTEM_PROMPT, RECAP_SYSTEM_PROMPT
 from ..schemas import (
     AttendanceUpdate,
+    AgendaResponse,
     CarryForwardResponse,
     RecapConfirmResponse,
     RecapData,
@@ -41,6 +43,10 @@ from .action_items import (
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/meetings", tags=["meetings"])
+
+
+class AgendaDraft(BaseModel):
+    agenda: str
 STATUS_TRANSITIONS = {
     MeetingStatus.DRAFT: MeetingStatus.SCHEDULED,
     MeetingStatus.SCHEDULED: MeetingStatus.HELD,
@@ -93,6 +99,16 @@ def _fallback_recap(notes: str) -> RecapData:
 def _match_owner(owner_name: str | None, participants: list[Participant]) -> tuple[int | None, bool]:
     if not owner_name:
         return None, True
+    normalized_owner = owner_name.strip().casefold()
+    for participant in participants:
+        participant_name = participant.name.strip().casefold()
+        if (
+            normalized_owner == participant_name
+            or normalized_owner in participant_name.split()
+            or participant_name in normalized_owner.split()
+        ):
+            return participant.id, False
+
     names = [participant.name for participant in participants]
     matches = difflib.get_close_matches(owner_name, names, n=1, cutoff=0.6)
     if not matches:
@@ -155,6 +171,25 @@ def update_meeting(
     db.commit()
     db.refresh(meeting)
     return meeting
+
+
+@router.post("/{meeting_id}/ai/agenda", response_model=AgendaResponse)
+def suggest_agenda(meeting_id: int, db: Session = Depends(get_db)) -> AgendaResponse:
+    meeting = get_meeting_or_404(meeting_id, db)
+    prompt = f"Meeting title: {meeting.title}\nExisting notes: {meeting.notes_raw}"
+    try:
+        draft = call_ai_json(
+            "meeting_agenda",
+            AGENDA_SYSTEM_PROMPT,
+            prompt,
+            AgendaDraft,
+        )
+        return AgendaResponse(agenda=draft.agenda, fallback=False)
+    except AIUnavailableError:
+        return AgendaResponse(
+            agenda="Objectives and updates\nDecisions needed\nRisks and blockers\nActions and next steps",
+            fallback=True,
+        )
 
 
 @router.delete("/{meeting_id}", status_code=204)

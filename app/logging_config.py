@@ -1,11 +1,12 @@
 import contextvars
 import json
 import logging
-import os
 import re
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any
+
+from .config import get_settings
 
 
 request_id_context: contextvars.ContextVar[str] = contextvars.ContextVar(
@@ -71,7 +72,8 @@ class JsonFormatter(logging.Formatter):
 
 
 def configure_logging() -> None:
-    log_path = Path(os.getenv("LOG_FILE", "logs/app.log"))
+    settings = get_settings()
+    log_path = Path(settings.log_file)
     log_path.parent.mkdir(parents=True, exist_ok=True)
     formatter = JsonFormatter()
     redaction_filter = RedactionFilter()
@@ -80,7 +82,7 @@ def configure_logging() -> None:
         RotatingFileHandler(log_path, maxBytes=5_000_000, backupCount=3, delay=True),
     ]
     root_logger = logging.getLogger()
-    root_logger.setLevel(logging.INFO)
+    root_logger.setLevel(settings.log_level.upper())
     root_logger.handlers.clear()
     for handler in handlers:
         handler.setFormatter(formatter)
