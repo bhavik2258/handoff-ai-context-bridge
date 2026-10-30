@@ -1,4 +1,5 @@
 import logging
+import os
 import time
 import uuid
 from contextlib import asynccontextmanager
@@ -12,9 +13,11 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .config import get_settings
 from .database import create_tables
+from .database import SessionLocal
 from .logging_config import configure_logging, request_id_context
+from .seed import seed_if_empty
 from . import models  # noqa: F401
-from .routers import action_items, meetings, participants
+from .routers import action_items, knowledge, meetings, participants, radar
 
 
 configure_logging()
@@ -26,7 +29,11 @@ settings = get_settings()
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    configure_logging()
     create_tables()
+    if os.getenv("HANDOFF_SKIP_SEED") != "1":
+        with SessionLocal() as db:
+            seed_if_empty(db)
     yield
 
 
@@ -34,6 +41,8 @@ app = FastAPI(title=settings.app_name, lifespan=lifespan)
 app.include_router(participants.router, prefix="/api")
 app.include_router(meetings.router, prefix="/api")
 app.include_router(action_items.router, prefix="/api")
+app.include_router(knowledge.router, prefix="/api")
+app.include_router(radar.router, prefix="/api")
 
 app.add_middleware(
     CORSMiddleware,

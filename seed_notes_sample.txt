@@ -1,0 +1,25 @@
+Maya: Quick check before we lock the Payments Revamp release.
+Ethan: The provider adapter is behind the feature flag now.
+Nora: I’ll finish the refund regression cases by Friday.
+Luis: I can run the full suite after the test data refresh.
+Priya: Deployment needs a rollback script before launch.
+Maya: Can you confirm who owns the release communication?
+Ethan: The metrics dashboard still misses provider-level failures.
+Nora: We saw one duplicate charge alert in staging.
+Luis: I was absent from the sprint review, please send me the decision notes.
+Priya: The vendor wants the incident contact list updated.
+Maya: Action: document the refund edge cases.
+Ethan: I’ll investigate the duplicate charge alert.
+Nora: Can you add a case for a delayed webhook?
+Luis: The regression suite is blocked on the new fixtures.
+Priya: I’ll prepare the deployment window and rollback steps.
+Maya: Deadline for readiness updates is next Wednesday.
+Ethan: The adapter tests are green locally.
+Nora: I can review the dashboard query tomorrow.
+Luis: Please remind me about the refund sign-off.
+Priya: The provider contract renews in September.
+Maya: We agreed to use a feature flag for the first release.
+Ethan: I’ll post the launch checklist in the team channel.
+Nora: Can you confirm the QA owner for release day?
+Luis: The incident postmortem calls out missing provider metrics.
+Priya: No production deploy while the rollback script is unreviewed.

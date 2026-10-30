@@ -33,6 +33,7 @@ class Participant(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(120), nullable=False)
     email: Mapped[str | None] = mapped_column(String(255), nullable=True, unique=True)
+    role: Mapped[str] = mapped_column(String(40), default="", nullable=False)
 
     meeting_participation: Mapped[list["MeetingParticipant"]] = relationship(
         back_populates="participant", cascade="all, delete-orphan"
@@ -170,6 +171,8 @@ class KnowledgeDoc(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     title: Mapped[str] = mapped_column(String(240), nullable=False)
+    doc_type: Mapped[str] = mapped_column(String(30), nullable=False)
+    tags: Mapped[str] = mapped_column(Text, default="[]", nullable=False)
     url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     content: Mapped[str | None] = mapped_column(Text, nullable=True)
 
@@ -192,6 +195,7 @@ class KnowledgeLink(Base):
         ForeignKey("action_items.id"), nullable=True
     )
     relevance: Mapped[str | None] = mapped_column(Text, nullable=True)
+    score: Mapped[float] = mapped_column(default=0, nullable=False)
 
     knowledge_doc: Mapped[KnowledgeDoc] = relationship(back_populates="links")
     meeting: Mapped[Meeting | None] = relationship(back_populates="knowledge_links")

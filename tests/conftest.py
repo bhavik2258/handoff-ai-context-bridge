@@ -12,6 +12,7 @@ _LOG_PATH = _TEST_DIRECTORY / "app.log"
 
 os.environ["DATABASE_URL"] = f"sqlite:///{_DATABASE_PATH}"
 os.environ["LOG_FILE"] = str(_LOG_PATH)
+os.environ["HANDOFF_SKIP_SEED"] = "1"
 
 
 @pytest.fixture

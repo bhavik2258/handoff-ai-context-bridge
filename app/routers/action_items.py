@@ -1,4 +1,6 @@
 import logging
+import json
+import re
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -12,6 +14,8 @@ from ..models import (
     ActionItemStatus,
     Meeting,
     MeetingParticipant,
+    KnowledgeDoc,
+    KnowledgeLink,
     Participant,
 )
 from ..schemas import (
@@ -20,11 +24,62 @@ from ..schemas import (
     ActionItemResponse,
     ActionItemStatusUpdate,
     ActionItemUpdate,
+    KnowledgeLinkList,
+    KnowledgeLinkResponse,
+    KnowledgeLinkSuggestion,
+    NudgeRequest,
+    NudgeDraft,
+    NudgeResponse,
 )
+from ..services.ai_client import AIUnavailableError, call_ai_json
+from ..services.prompts import KNOWLEDGE_LINK_SYSTEM_PROMPT, NUDGE_SYSTEM_PROMPT
+from pydantic import RootModel
+from ..services.radar import risk_score
 
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/action-items", tags=["action-items"])
+
+
+class LinkSuggestions(RootModel[list[KnowledgeLinkSuggestion]]):
+    pass
+
+
+def _keywords(text: str) -> set[str]:
+    return {word for word in re.findall(r"[a-z0-9]+", text.lower()) if len(word) > 2}
+
+
+def _fallback_links(item: ActionItem, docs: list[KnowledgeDoc]) -> list[KnowledgeLinkSuggestion]:
+    item_words = _keywords(" ".join(filter(None, [item.title, item.source_quote, item.outcome])))
+    ranked = []
+    for doc in docs:
+        doc_text = " ".join([doc.title, doc.tags, doc.content or ""])
+        overlap = item_words & _keywords(doc_text)
+        if overlap:
+            score = min(1.0, len(overlap) / max(1, len(item_words)))
+            ranked.append(KnowledgeLinkSuggestion(
+                doc_id=doc.id,
+                reason=f"Keyword overlap: {', '.join(sorted(overlap))}",
+                score=score,
+            ))
+    return sorted(ranked, key=lambda link: link.score, reverse=True)[:3]
+
+
+def _nudge_fallback(item: ActionItem, tone: str, reasons: list[str]) -> dict[str, str]:
+    due_date = item.due_date.date().isoformat() if item.due_date else "no due date"
+    carried = f"{item.carry_count} time(s)"
+    reason_text = "; ".join(reasons) if reasons else "no current risk factors"
+    if tone == "friendly":
+        message = (
+            f"Hi, a quick reminder about '{item.title}'. It is due {due_date} "
+            f"and has been carried {carried}. Risk factors: {reason_text}."
+        )
+    else:
+        message = (
+            f"Please address '{item.title}'. It is due {due_date}, has been carried "
+            f"{carried}, and has these risk factors: {reason_text}."
+        )
+    return {"subject": f"Reminder: {item.title}", "message": message}
 
 
 def get_action_item_or_404(item_id: int, db: Session) -> ActionItem:
@@ -128,6 +183,124 @@ def list_action_items(
     if meeting_id is not None:
         statement = statement.where(ActionItem.meeting_id == meeting_id)
     return list(db.scalars(statement).all())
+
+
+@router.post("/{item_id}/ai/link", response_model=KnowledgeLinkList)
+def link_knowledge(
+    item_id: int, db: Session = Depends(get_db)
+) -> KnowledgeLinkList:
+    item = get_action_item_or_404(item_id, db)
+    docs = list(db.scalars(select(KnowledgeDoc).order_by(KnowledgeDoc.id)).all())
+    context = {
+        "item": {
+            "title": item.title,
+            "description": item.source_quote or item.outcome or "",
+        },
+        "documents": [
+            {
+                "id": doc.id,
+                "title": doc.title,
+                "text": (doc.content or "")[:200],
+            }
+            for doc in docs
+        ],
+    }
+    fallback = False
+    try:
+        suggestions = call_ai_json(
+            "action_item_knowledge_links",
+            KNOWLEDGE_LINK_SYSTEM_PROMPT,
+            json.dumps(context),
+            LinkSuggestions,
+        ).root
+    except AIUnavailableError:
+        suggestions = _fallback_links(item, docs)
+        fallback = True
+        logger.warning(
+            "action_item.knowledge_link_fallback",
+            extra={"event": "action_item.knowledge_link_fallback", "action_item_id": item.id},
+        )
+
+    valid_docs = {doc.id: doc for doc in docs}
+    suggestions = [suggestion for suggestion in suggestions if suggestion.doc_id in valid_docs]
+    item.knowledge_links.clear()
+    for suggestion in suggestions:
+        item.knowledge_links.append(
+            KnowledgeLink(
+                knowledge_doc_id=suggestion.doc_id,
+                action_item_id=item.id,
+                relevance=suggestion.reason,
+                score=suggestion.score,
+            )
+        )
+    db.commit()
+    return KnowledgeLinkList(
+        links=[
+            KnowledgeLinkResponse(
+                doc_id=suggestion.doc_id,
+                reason=suggestion.reason,
+                score=suggestion.score,
+                fallback=fallback,
+            )
+            for suggestion in suggestions
+        ],
+        fallback=fallback,
+    )
+
+
+@router.get("/{item_id}/links", response_model=KnowledgeLinkList)
+def list_knowledge_links(
+    item_id: int, db: Session = Depends(get_db)
+) -> KnowledgeLinkList:
+    item = get_action_item_or_404(item_id, db)
+    return KnowledgeLinkList(
+        links=[
+            KnowledgeLinkResponse(
+                doc_id=link.knowledge_doc_id,
+                reason=link.relevance or "",
+                score=link.score,
+            )
+            for link in item.knowledge_links
+        ]
+    )
+
+
+@router.post("/{item_id}/ai/nudge", response_model=NudgeResponse)
+def generate_nudge(
+    item_id: int,
+    payload: NudgeRequest,
+    db: Session = Depends(get_db),
+) -> NudgeResponse:
+    item = get_action_item_or_404(item_id, db)
+    if item.status == ActionItemStatus.CLOSED:
+        raise HTTPException(status_code=409, detail="Closed action items cannot be nudged")
+
+    risk = risk_score(item, datetime.utcnow())
+    context = {
+        "tone": payload.tone,
+        "owner_name": item.owner.name if item.owner else None,
+        "title": item.title,
+        "due_date": item.due_date.date().isoformat() if item.due_date else None,
+        "carry_count": item.carry_count,
+        "reasons": risk["reasons"],
+    }
+    fallback = False
+    try:
+        draft = call_ai_json(
+            "action_item_nudge",
+            NUDGE_SYSTEM_PROMPT,
+            json.dumps(context),
+            NudgeDraft,
+        )
+        result = {"subject": draft.subject, "message": draft.message}
+    except AIUnavailableError:
+        result = _nudge_fallback(item, payload.tone, risk["reasons"])
+        fallback = True
+    logger.info(
+        "nudge.generated",
+        extra={"event": "nudge.generated", "action_item_id": item.id, "fallback": fallback},
+    )
+    return NudgeResponse(**result, fallback=fallback)
 
 
 @router.patch("/{item_id}", response_model=ActionItemResponse)

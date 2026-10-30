@@ -1,6 +1,7 @@
 import contextvars
 import json
 import logging
+import os
 import re
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -48,7 +49,20 @@ class JsonFormatter(logging.Formatter):
             "message": redact(record.getMessage()),
             "request_id": request_id_context.get(),
         }
-        for field in ("event", "method", "path", "status", "duration_ms"):
+        for field in (
+            "event",
+            "method",
+            "path",
+            "status",
+            "duration_ms",
+            "provider",
+            "model",
+            "feature",
+            "latency_ms",
+            "outcome",
+            "input_tokens",
+            "output_tokens",
+        ):
             if hasattr(record, field):
                 payload[field] = getattr(record, field)
         if record.exc_info:
@@ -57,13 +71,13 @@ class JsonFormatter(logging.Formatter):
 
 
 def configure_logging() -> None:
-    log_path = Path("logs/app.log")
+    log_path = Path(os.getenv("LOG_FILE", "logs/app.log"))
     log_path.parent.mkdir(parents=True, exist_ok=True)
     formatter = JsonFormatter()
     redaction_filter = RedactionFilter()
     handlers: list[logging.Handler] = [
         logging.StreamHandler(),
-        RotatingFileHandler(log_path, maxBytes=5_000_000, backupCount=3),
+        RotatingFileHandler(log_path, maxBytes=5_000_000, backupCount=3, delay=True),
     ]
     root_logger = logging.getLogger()
     root_logger.setLevel(logging.INFO)
@@ -72,3 +86,5 @@ def configure_logging() -> None:
         handler.setFormatter(formatter)
         handler.addFilter(redaction_filter)
         root_logger.addHandler(handler)
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
