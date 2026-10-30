@@ -14,7 +14,7 @@ from .config import get_settings
 from .database import create_tables
 from .logging_config import configure_logging, request_id_context
 from . import models  # noqa: F401
-from .routers import meetings, participants
+from .routers import action_items, meetings, participants
 
 
 configure_logging()
@@ -33,6 +33,7 @@ async def lifespan(_: FastAPI):
 app = FastAPI(title=settings.app_name, lifespan=lifespan)
 app.include_router(participants.router, prefix="/api")
 app.include_router(meetings.router, prefix="/api")
+app.include_router(action_items.router, prefix="/api")
 
 app.add_middleware(
     CORSMiddleware,
