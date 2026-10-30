@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>HandOff — work, handed over</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div><span class="mark">H</span><strong>HandOff</strong><span class="tagline">work, handed over</span></div>
+    <button id="brief-button" class="button secondary">Generate catch-up brief</button>
+  </header>
+  <main class="layout">
+    <section class="hero">
+      <p class="eyebrow">TEAM MEMORY, WITHOUT THE MEETING TAX</p>
+      <h1>Keep the thread.<br><em>Move the work forward.</em></h1>
+      <p class="lede">Capture what happened, carry open work forward, and spot the handoffs most likely to go stale.</p>
+    </section>
+    <section class="grid">
+      <div class="panel capture">
+        <div class="panel-title"><span>01</span><h2>Capture a meeting</h2></div>
+        <form id="meeting-form">
+          <label>Meeting title<input name="title" required placeholder="e.g. Product launch sync"></label>
+          <label>Participants<input name="participants" placeholder="Names, separated by commas"></label>
+          <label>Raw notes<textarea name="raw_notes" rows="5" placeholder="Paste notes or a transcript..."></textarea></label>
+          <label>Decisions<textarea name="decisions" rows="2" placeholder="One decision per line"></textarea></label>
+          <label>Action items<textarea name="actions" rows="3" placeholder="Action | owner | due date (YYYY-MM-DD)"></textarea></label>
+          <button class="button primary" type="submit">Save & structure notes <span>→</span></button>
+        </form>
+        <p id="form-message" class="message"></p>
+      </div>
+      <div class="panel radar">
+        <div class="panel-title"><span>02</span><h2>Stale item radar</h2><span id="radar-count" class="count"></span></div>
+        <p class="muted">Items that need a nudge before they become tomorrow's emergency.</p>
+        <div id="radar-list" class="radar-list"><p class="muted">Loading radar...</p></div>
+      </div>
+    </section>
+    <section class="panel history">
+      <div class="panel-title"><span>03</span><h2>Handoff history</h2></div>
+      <div id="meeting-list"></div>
+    </section>
+  </main>
+  <dialog id="brief-dialog"><button class="close" onclick="this.parentElement.close()">×</button><p class="eyebrow">AI CATCH-UP BRIEF</p><h2>What you missed</h2><div id="brief-content">Generating...</div></dialog>
+  <script src="/static/app.js"></script>
+</body>
+</html>
